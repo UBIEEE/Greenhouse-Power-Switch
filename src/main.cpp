@@ -36,6 +36,8 @@ NTPClient timeClient(ntpUDP);
 const int led = LED_BUILTIN;
 bool isHigh = LOW;
 
+bool isTriggered = false;
+
 void alarmTrigger(){
 
   AlarmMatch match;
@@ -48,7 +50,6 @@ void alarmTrigger(){
   // match2.addMatchSecond();
 
   digitalWrite(LED_BUILTIN, isHigh);
-  digitalWrite(13, isHigh);
   isHigh = !isHigh;
 
   Alarm1Set = !Alarm1Set;
@@ -60,54 +61,15 @@ void alarmTrigger(){
   }
 }
 
-// void syncTimeOverHTTP() {
-//   if (WiFi.status() == WL_CONNECTED) {
-//     WiFiClient c;
-//     HttpClient http = HttpClient(c, "https://timeapi.io", 80);
-//     // Querying an HTTP Time API
-//     http.beginRequest();
-//     http.get("/api/v1/time/current/utc");
-    
-//     int httpCode = http.responseStatusCode();
-    
-//     Serial.println(httpCode);
-//     if (httpCode > 0) {
-//       String payload = http.responseBody();
-//       Serial.println(payload);
-
-//       // // Parse the JSON payload
-//       // StaticJsonDocument<512> doc;
-//       // deserializeJson(doc, payload);
-      
-//       // // Get Unix Epoch Time (seconds since Jan 1 1970)
-//       // long long epochTime = doc["unixtime"]; 
-//       // Serial.print("Synchronized Epoch Time over HTTP: ");
-//       // Serial.println(epochTime);
-      
-//       // // You can now feed this value into the standard <time.h> library 
-//       // // or set your hardware Real Time Clock (RTC)
-//     }
-//     http.endRequest();
-//   }
-// }
-
 void minTest(){
-  // digitalWrite(LED_BUILTIN, isHigh);
-  // digitalWrite(13, isHigh);
-  // isHigh = !isHigh;
+  digitalWrite(LED_BUILTIN, isHigh);
+  isHigh = !isHigh;
 
-  RTCTime now;
-  RTC.getTime(now);
-
-  //Serial.print("Executed exactly on the whole minute: ");
-  Serial.print(now.getHour());
-  Serial.print(":");
-  Serial.print(now.getMinutes());
-  Serial.print(":");
-  Serial.println(now.getSeconds());
+  isTriggered = true;
 }
 
 int NTPSync(){
+  timeClient.update();
   long epochTime = timeClient.getEpochTime();
   RTCTime timeToSet = RTCTime(epochTime);
   RTC.setTime(timeToSet);
@@ -151,9 +113,9 @@ void setup() {
 
   //RTCTime mytime(12, Month::NOVEMBER, 2025, 19, 43, 00, DayOfWeek::WEDNESDAY, SaveLight::SAVING_TIME_ACTIVE);
 
-  long epochTime = timeClient.getEpochTime();
-  RTCTime timeToSet = RTCTime(epochTime);
-  RTC.setTime(timeToSet);
+  NTPSync();
+
+  minTest();
 
   match.addMatchSecond();
   //match.addMatchHour();
@@ -166,22 +128,19 @@ void setup() {
   //   Serial.println("ERROR: Initial alarm callback not set");
   // }
 
-  digitalWrite(LED_BUILTIN, LOW);
-  digitalWrite(13, LOW);
+  digitalWrite(LED_BUILTIN, HIGH);
 
   //alarmTrigger();
   Serial.println("Setup Success");
 }
 
 
-void loop(){ 
-  delay(1000); 
-  RTCTime now;
-  RTC.getTime(now);
-
-  Serial.print(now.getHour());
-  Serial.print(":");
-  Serial.print(now.getMinutes());
-  Serial.print(":");
-  Serial.println(now.getSeconds());
+void loop(){  
+  if (isTriggered){
+    isTriggered = false;
+    if (isHigh){
+      NTPSync();
+    }
+    Serial.println(timeClient.getFormattedTime());
+  }
 }
