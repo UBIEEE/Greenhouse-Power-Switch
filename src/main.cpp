@@ -10,6 +10,9 @@
 //#include <WiFi.h> // for WiFi shield
 //#include <WiFi101.h> // for WiFi 101 shield or MKR1000
 #include <WiFiUdp.h>
+#include "key.h"
+
+#include <Adafruit_MQTT_Client.h>
 
 void periodicCallback();
 
@@ -32,6 +35,18 @@ NTPClient timeClient(ntpUDP);
 // You can specify the time server pool and the offset, (in seconds)
 // additionally you can specify the update interval (in milliseconds).
 // NTPClient timeClient(ntpUDP, "europe.pool.ntp.org", 3600, 60000);
+
+#define IO_USERNAME  "IEEEGreen"
+#define AIO_SERVER      "io.adafruit.com"
+#define AIO_SERVERPORT  1883
+
+WiFiClient client;
+
+Adafruit_MQTT_Client mqtt(&client, AIO_SERVER, AIO_SERVERPORT, IO_USERNAME, IO_KEY);
+
+Adafruit_MQTT_Publish test = Adafruit_MQTT_Publish(&mqtt, IO_USERNAME "/feeds/test");
+
+Adafruit_MQTT_Subscribe testPull = Adafruit_MQTT_Subscribe(&mqtt, IO_USERNAME "/feeds/test2");
 
 const int led = LED_BUILTIN;
 bool isHigh = LOW;
@@ -92,8 +107,10 @@ void setup() {
   }
   Serial.print("Connected: ");
   Serial.println(WiFi.status() == WL_CONNECTED);
-
-  //syncTimeOverHTTP();
+  Serial.println("IP address: "); Serial.println(WiFi.localIP());
+  
+  //subscribe
+  mqtt.subscribe(&testPull);
 
   timeClient.begin();
   delay(1000);
@@ -134,13 +151,65 @@ void setup() {
   Serial.println("Setup Success");
 }
 
+void MQTT_connect() {
+  int8_t ret;
+
+  // Stop if already connected.
+  if (mqtt.connected()) {
+    return;
+  }
+
+  Serial.print("Connecting to MQTT... ");
+
+  uint8_t retries = 3;
+  while ((ret = mqtt.connect()) != 0) { // connect will return 0 for connected
+       Serial.println(mqtt.connectErrorString(ret));
+       Serial.println("Retrying MQTT connection in 5 seconds...");
+       mqtt.disconnect();
+       delay(5000);  // wait 5 seconds
+       retries--;
+       if (retries == 0) {
+         // basically die and wait for WDT to reset me
+         while (1);
+       }
+  }
+
+  Serial.println("MQTT Connected!");
+}
+
+uint32_t x = 25;
 
 void loop(){  
   if (isTriggered){
     isTriggered = false;
+    MQTT_connect();
+    Serial.print(F("\nSending val "));
+    Serial.println(x);
+
+    if (!test.publish(x++))
+    {
+      Serial.println(F("Failed"));
+    }
+    else
+    {
+      Serial.println(F("OK!"));
+    }
+    Serial.println("--read--");
+
+    Adafruit_MQTT_Subscribe *sub = mqtt.readSubscription(5000);
+
+    if (sub == &testPull)
+    {
+      Serial.println((char *)testPull.lastread);
+    }
+    else{
+      Serial.println("failed read");
+    }
+
     if (isHigh){
       NTPSync();
     }
     Serial.println(timeClient.getFormattedTime());
   }
 }
+
